@@ -122,7 +122,8 @@ type GetImageRequest struct {
 }
 
 type GetImageResponse struct {
-	Image *image.Image
+	Image                  *image.Image
+	InformationDatabaseURL string
 }
 
 const (
