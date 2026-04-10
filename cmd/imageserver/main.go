@@ -117,8 +117,9 @@ func main() {
 		units.None, "number of images")
 	imgSrvRpcHtmlWriter, err := imageserverRpcd.Setup(
 		imageserverRpcd.Config{
-			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
-			ReplicationMaster:         imageServerAddress,
+			AllowUnauthenticatedReads:   *allowUnauthenticatedReads,
+			InformationDatabaseTemplate: *informationDatabaseTemplate,
+			ReplicationMaster:           imageServerAddress,
 		},
 		imageserverRpcd.Params{
 			ImageDataBase: imdb,
