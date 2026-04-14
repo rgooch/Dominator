@@ -2,11 +2,15 @@ package version
 
 // Info contains version information for a binary.
 type Info struct {
-	Version   string `json:"version"`
-	GitCommit string `json:"gitCommit"`
-	BuildDate string `json:"buildDate"`
-	GoVersion string `json:"goVersion"`
-	Dirty     bool   `json:"dirty"`
+	Version       string `json:"version"`
+	GitCommit     string `json:"gitCommit"`
+	GitOrigin     string `json:"gitOrigin"`
+	GitBranch     string `json:"gitBranch"`
+	CommitsBehind int    `json:"commitsBehind"`
+	IsFork        bool   `json:"isFork"`
+	BuildDate     string `json:"buildDate"`
+	GoVersion     string `json:"goVersion"`
+	Dirty         bool   `json:"dirty"`
 }
 
 // Get returns the version information for the current binary.

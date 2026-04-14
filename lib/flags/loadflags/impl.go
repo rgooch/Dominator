@@ -19,6 +19,15 @@ func registerVersionFlag(name string) {
 		info := version.Get()
 		fmt.Printf("%s %s\n", name, info.Version)
 		fmt.Printf("  Commit: %s\n", info.GitCommit)
+		if info.IsFork {
+			fmt.Printf("  Origin: %s\n", info.GitOrigin)
+		}
+		if info.GitBranch != "master" {
+			fmt.Printf("  Branch: %s\n", info.GitBranch)
+		}
+		if info.CommitsBehind > 0 {
+			fmt.Printf("  Behind: %d commits\n", info.CommitsBehind)
+		}
 		fmt.Printf("  Built:  %s\n", info.BuildDate)
 		fmt.Printf("  Go:     %s\n", info.GoVersion)
 		os.Exit(0)

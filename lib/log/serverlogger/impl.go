@@ -80,8 +80,18 @@ func newLogger(name string, options logbuf.Options, flags int) *Logger {
 	}
 	if *logAtStartup {
 		info := version.Get()
-		logger.Printf("Startup: %s (commit: %s, built: %s, go: %s)",
-			info.Version, info.GitCommit, info.BuildDate, info.GoVersion)
+		extra := ""
+		if info.IsFork {
+			extra += fmt.Sprintf(", origin: %s", info.GitOrigin)
+		}
+		if info.GitBranch != "master" {
+			extra += fmt.Sprintf(", branch: %s", info.GitBranch)
+		}
+		if info.CommitsBehind > 0 {
+			extra += fmt.Sprintf(", behind: %d", info.CommitsBehind)
+		}
+		logger.Printf("Startup: %s (commit: %s%s, built: %s, go: %s)",
+			info.Version, info.GitCommit, extra, info.BuildDate, info.GoVersion)
 	}
 	return logger
 }

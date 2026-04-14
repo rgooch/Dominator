@@ -1,5 +1,5 @@
-# Generated version file
-lib/version/VERSION
+# Generated build info
+lib/version/BUILD_INFO
 
 go.work
 go.work.sum
