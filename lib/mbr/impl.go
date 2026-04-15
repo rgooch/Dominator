@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 )
+
+type sizeMiB uint64
 
 func decode(file *os.File) (*Mbr, error) {
 	var mbr Mbr
@@ -31,27 +35,42 @@ func write32LE(address []byte, value uint64) {
 	address[3] = byte((value >> 24) & 0xff)
 }
 
-func writeDefault(filename string, tableType TableType) error {
+func write(filename string, tableType TableType, partitions []Partition) error {
+	if len(partitions) < 1 {
+		partitions = []Partition{{Type: "ext2"}}
+	}
 	label, err := tableType.lookupString()
 	if err != nil {
 		return err
 	}
 	fmt.Printf("making table type: %d (%s)\n", tableType, label)
-	var cmd *exec.Cmd
+	cmd := exec.Command("parted", "-s", "-a", "optimal", filename,
+		"mklabel", label)
+	partitionStart := sizeMiB(1)
 	switch tableType {
 	case TABLE_TYPE_GPT:
-		cmd = exec.Command("parted", "-s", "-a", "optimal", filename,
-			"mklabel", label,
-			"mkpart", "fat32", "1MiB", "129MiB",
-			"mkpart", "primary", "ext2", "129MiB", "100%",
-			"set", "1", "esp", "on",
-		)
+		cmd.Args = append(cmd.Args, "mkpart", "fat32", "1MiB", "129MiB")
+		partitionStart += 128
 	default:
-		cmd = exec.Command("parted", "-s", "-a", "optimal", filename,
-			"mklabel", label,
-			"mkpart", "primary", "ext2", "1", "100%",
-			"set", "1", "boot", "on",
-		)
+	}
+	for _, partition := range partitions {
+		partitionSize := makeSizeMiB(partition.Size)
+		partitionType := partition.Type
+		switch partitionType {
+		case "ext4":
+			partitionType = "ext2"
+		default:
+			partitionType = "ext2"
+		}
+		cmd.Args = append(cmd.Args, "mkpart", "primary", partitionType,
+			partitionStart.String(), (partitionStart + partitionSize).String())
+		partitionStart += partitionSize
+	}
+	switch tableType {
+	case TABLE_TYPE_GPT:
+		cmd.Args = append(cmd.Args, "set", "1", "esp", "on")
+	default:
+		cmd.Args = append(cmd.Args, "set", "1", "boot", "on")
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -111,4 +130,20 @@ func (mbr *Mbr) write(filename string) error {
 		}
 		return nil
 	}
+}
+
+func makeSizeMiB(size types.Bytes) sizeMiB {
+	unitSize := types.Bytes(1 << 20)
+	sizeInUnits := size / unitSize
+	if sizeInUnits*unitSize < size {
+		sizeInUnits++
+	}
+	return sizeMiB(sizeInUnits)
+}
+
+func (size sizeMiB) String() string {
+	if size < 1 {
+		return "100%"
+	}
+	return fmt.Sprintf("%dMiB", size)
 }
