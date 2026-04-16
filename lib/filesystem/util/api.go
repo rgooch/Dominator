@@ -11,6 +11,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
+	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 type BootInfoType struct {
@@ -32,8 +34,8 @@ type ComputedFilesData struct {
 	RootDirectory string
 }
 
-type GroupId uint
-type UserId uint
+type GroupId = types.GroupId
+type UserId = types.UserId
 
 type MakeExt4fsParams struct {
 	BytesPerInode            uint64
@@ -159,6 +161,7 @@ type WriteRawOptions struct {
 	AllocateBlocks       bool
 	DoChroot             bool
 	ExtraKernelOptions   string
+	ExtraPartitions      []installer.Partition
 	InitialImageName     string
 	InstallBootloader    bool
 	MinimumFreeBytes     uint64

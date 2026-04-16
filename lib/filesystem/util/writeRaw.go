@@ -27,7 +27,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
+	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 const (
@@ -435,6 +437,31 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 	return nil
 }
 
+func makeExtraFileSystems(bootDevice, partitionPrefix string,
+	startPartition int, options WriteRawOptions, logger log.Logger) error {
+	for index, partition := range options.ExtraPartitions {
+		if partition.FileSystemType != installer.FileSystemTypeExt4 {
+			return fmt.Errorf("extra partition: %d is not ext4fs", index)
+		}
+		err := makeExt4fs(fmt.Sprintf("%s%s%d",
+			bootDevice, partitionPrefix, startPartition+index),
+			MakeExt4fsParams{
+				BytesPerInode:            uint64(partition.BytesPerInode),
+				Label:                    partition.FileSystemLabel,
+				NoDiscard:                true,
+				ReservedBlocksPercentage: uint16(partition.ReservedBlocksPercentage),
+				RootGroupId:              partition.RootGroupId,
+				RootUserId:               partition.RootUserId,
+				Size:                     partition.MinimumBytes,
+			},
+			logger)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func sanitiseInput(ch rune) rune {
 	if 'a' <= ch && ch <= 'z' {
 		return ch
@@ -706,27 +733,50 @@ func writeImageName(mountPoint, imageName string) error {
 	return fsutil.CopyToFile(pathname, fsutil.PublicFilePerms, buffer, 0)
 }
 
+func writeMbr(filename string, tableType mbr.TableType, rootSize uint64,
+	options WriteRawOptions) error {
+	if len(options.ExtraPartitions) < 1 {
+		return mbr.WriteDefault(filename, tableType)
+	}
+	partitions := []mbr.Partition{{Size: types.Bytes(rootSize), Type: "ext2"}}
+	for _, extraPartition := range options.ExtraPartitions {
+		partitions = append(partitions, mbr.Partition{
+			Size: types.Bytes(extraPartition.MinimumBytes),
+			Type: extraPartition.FileSystemType.String(),
+		})
+	}
+	return mbr.Write(filename, tableType, partitions)
+}
+
 func writeToBlock(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice string,
 	tableType mbr.TableType, options WriteRawOptions,
 	logger log.DebugLogger) error {
-	if err := mbr.WriteDefault(bootDevice, tableType); err != nil {
+	usageEstimate := fs.EstimateUsage(0)
+	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	rootBytes += options.MinimumFreeBytes
+	if err := writeMbr(bootDevice, tableType, rootBytes, options); err != nil {
 		return err
 	}
-	index := "1"
+	index := 1
+	indexString := "1"
 	var makeEfi bool
 	if tableType == mbr.TABLE_TYPE_GPT {
-		index = "2"
+		index = 2
+		indexString = "2"
 		makeEfi = true
 	}
-	rootDevice, err := waitForRootPartition(bootDevice, index,
+	rootDevice, err := waitForRootPartition(bootDevice, indexString,
 		options.PartitionWaitTimeout)
 	if err != nil {
 		return err
-	} else {
-		return makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice,
-			makeEfi, options, logger)
 	}
+	err = makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice, makeEfi,
+		options, logger)
+	if err != nil {
+		return err
+	}
+	return makeExtraFileSystems(bootDevice, "", index+1, options, logger)
 }
 
 func writeToFile(fs *filesystem.FileSystem,
@@ -741,10 +791,14 @@ func writeToFile(fs *filesystem.FileSystem,
 		defer os.Remove(tmpFilename)
 	}
 	usageEstimate := fs.EstimateUsage(0)
-	minBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
-	minBytes += options.MinimumFreeBytes
+	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	rootBytes += options.MinimumFreeBytes
+	minBytes := rootBytes
 	if tableType == mbr.TABLE_TYPE_GPT {
 		minBytes += 130 << 20 // Leave space for the EFI partition.
+	}
+	for _, extraPartition := range options.ExtraPartitions {
+		minBytes += extraPartition.MinimumBytes
 	}
 	if options.RoundupPower < 24 {
 		options.RoundupPower = 24 // 16 MiB.
@@ -764,25 +818,31 @@ func writeToFile(fs *filesystem.FileSystem,
 				tmpFilename, err)
 		}
 	}
-	if err := mbr.WriteDefault(tmpFilename, tableType); err != nil {
+	if err := writeMbr(tmpFilename, tableType, rootBytes, options); err != nil {
 		return err
 	}
-	partition := "p1"
+	partition := 1
+	partitionString := "p1"
 	var makeEfi bool
 	if tableType == mbr.TABLE_TYPE_GPT {
 		makeEfi = true
-		partition = "p2"
+		partition = 2
+		partitionString = "p2"
 	}
 	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
-		partition, time.Minute, logger)
+		partitionString, time.Minute, logger)
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partitionString,
 		time.Minute, logger)
-	rootDevice := loopDevice + partition
+	rootDevice := loopDevice + partitionString
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, makeEfi,
 		options, logger)
+	if err != nil {
+		return err
+	}
+	err = makeExtraFileSystems(loopDevice, "p", partition+1, options, logger)
 	if err != nil {
 		return err
 	}
