@@ -164,6 +164,7 @@ type WriteRawOptions struct {
 	ExtraPartitions      []installer.Partition
 	InitialImageName     string
 	InstallBootloader    bool
+	MinimumBytes         types.Bytes
 	MinimumFreeBytes     uint64
 	OverlayDirectories   []string
 	OverlayFiles         map[string][]byte

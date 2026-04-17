@@ -754,7 +754,14 @@ func writeToBlock(fs *filesystem.FileSystem,
 	logger log.DebugLogger) error {
 	usageEstimate := fs.EstimateUsage(0)
 	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	if options.MinimumFreeBytes < 1 &&
+		rootBytes >= uint64(options.MinimumBytes) {
+		return fmt.Errorf("root file-system too large")
+	}
 	rootBytes += options.MinimumFreeBytes
+	if options.MinimumBytes > types.Bytes(rootBytes) {
+		rootBytes = uint64(options.MinimumBytes)
+	}
 	if err := writeMbr(bootDevice, tableType, rootBytes, options); err != nil {
 		return err
 	}
@@ -792,8 +799,15 @@ func writeToFile(fs *filesystem.FileSystem,
 	}
 	usageEstimate := fs.EstimateUsage(0)
 	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	if options.MinimumFreeBytes < 1 &&
+		rootBytes >= uint64(options.MinimumBytes) {
+		return fmt.Errorf("root file-system too large")
+	}
 	rootBytes += options.MinimumFreeBytes
-	minBytes := rootBytes
+	if options.MinimumBytes > types.Bytes(rootBytes) {
+		rootBytes = uint64(options.MinimumBytes)
+	}
+	minBytes := rootBytes + 1<<20 // Leave bottom 1 MiB free.
 	if tableType == mbr.TABLE_TYPE_GPT {
 		minBytes += 130 << 20 // Leave space for the EFI partition.
 	}
