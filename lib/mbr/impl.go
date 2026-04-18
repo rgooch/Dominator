@@ -53,9 +53,15 @@ func write(filename string, tableType TableType, partitions []Partition) error {
 		partitionStart += 128
 	default:
 	}
-	for _, partition := range partitions {
+	for index, partition := range partitions {
 		partitionSize := makeSizeMiB(partition.Size)
 		partitionType := partition.Type
+		var partitionEnd sizeMiB
+		if partitionSize > 0 {
+			partitionEnd = partitionStart + partitionSize
+		} else if index != len(partitions)-1 {
+			return fmt.Errorf("only last partition may have unspecified size")
+		}
 		switch partitionType {
 		case "ext4":
 			partitionType = "ext2"
@@ -63,7 +69,7 @@ func write(filename string, tableType TableType, partitions []Partition) error {
 			partitionType = "ext2"
 		}
 		cmd.Args = append(cmd.Args, "mkpart", "primary", partitionType,
-			partitionStart.String(), (partitionStart + partitionSize).String())
+			partitionStart.String(), partitionEnd.String())
 		partitionStart += partitionSize
 	}
 	switch tableType {
@@ -74,8 +80,8 @@ func write(filename string, tableType TableType, partitions []Partition) error {
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("error partitioning: %s: %s: %s",
-			filename, err, output)
+		return fmt.Errorf("error partitioning (%v): %s: %s: %s",
+			cmd.Args, filename, err, output)
 	}
 	return nil
 }
