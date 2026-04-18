@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/cleanup"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -225,7 +226,8 @@ func lookPath(rootDir, file string) (string, error) {
 
 func makeAndWriteRoot(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice, rootDevice string,
-	makeEfi bool, options WriteRawOptions, logger log.DebugLogger) error {
+	makeEfi bool, options WriteRawOptions, partitionPrefix string,
+	startPartition int, logger log.DebugLogger) error {
 	unsupportedOptions, err := getUnsupportedOptions(fs, objectsGetter)
 	if err != nil {
 		return err
@@ -265,6 +267,11 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
+	err = makeExtraFileSystems(bootDevice, partitionPrefix, startPartition,
+		options, logger)
+	if err != nil {
+		return err
+	}
 	rootMount, err := ioutil.TempDir("", "write-raw-image")
 	if err != nil {
 		return err
@@ -274,13 +281,33 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
+	cleanupFunctions := cleanup.NewCleanupFunctions(logger)
+	cleanupFunctions.Add(func() error {
+		return wsyscall.Unmount(rootMount, 0)
+	})
 	doUnmount := true
 	defer func() {
 		if doUnmount {
-			wsyscall.Unmount(rootMount, 0)
+			cleanupFunctions.HardCleanup()
 		}
 	}()
 	os.RemoveAll(filepath.Join(rootMount, "lost+found"))
+	for index, partition := range options.ExtraPartitions {
+		device := fmt.Sprintf("%s%s%d",
+			bootDevice, partitionPrefix, startPartition+index)
+		mountPoint := filepath.Join(rootMount,
+			filepath.Clean(partition.MountPoint))
+		if err := os.MkdirAll(mountPoint, fsutil.DirPerms); err != nil {
+			return err
+		}
+		err := wsyscall.Mount(device, mountPoint, "ext4", 0, "")
+		if err != nil {
+			return err
+		}
+		cleanupFunctions.Add(func() error {
+			return wsyscall.Unmount(mountPoint, 0)
+		})
+	}
 	if err := Unpack(fs, objectsGetter, rootMount, logger); err != nil {
 		return err
 	}
@@ -338,12 +365,12 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	doUnmount = false
 	startTime := time.Now()
-	if err := wsyscall.Unmount(rootMount, 0); err != nil {
-		return err
+	if err := cleanupFunctions.HardCleanup(); err != nil {
+		return fmt.Errorf("cleanup error: %w", err)
 	}
 	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
-		logger.Debugf(0, "Unmounted: %s in %s\n",
-			rootDevice, format.Duration(time.Since(startTime)))
+		logger.Debugf(0, "Unmounted in %s\n",
+			format.Duration(time.Since(startTime)))
 	}
 	return nil
 }
@@ -779,11 +806,11 @@ func writeToBlock(fs *filesystem.FileSystem,
 		return err
 	}
 	err = makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice, makeEfi,
-		options, logger)
+		options, "", index+1, logger)
 	if err != nil {
 		return err
 	}
-	return makeExtraFileSystems(bootDevice, "", index+1, options, logger)
+	return nil
 }
 
 func writeToFile(fs *filesystem.FileSystem,
@@ -852,11 +879,7 @@ func writeToFile(fs *filesystem.FileSystem,
 		time.Minute, logger)
 	rootDevice := loopDevice + partitionString
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, makeEfi,
-		options, logger)
-	if err != nil {
-		return err
-	}
-	err = makeExtraFileSystems(loopDevice, "p", partition+1, options, logger)
+		options, "p", partition+1, logger)
 	if err != nil {
 		return err
 	}
