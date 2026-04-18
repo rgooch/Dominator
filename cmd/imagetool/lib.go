@@ -384,7 +384,7 @@ func (ti *typedImage) load() error {
 		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, informationDatabaseURL, name, err :=
+		img, name, informationDatabaseURL, err :=
 			getLatestImage(imageSClient, ti.specifier, false)
 		if err != nil {
 			return err
@@ -438,7 +438,7 @@ func (ti *typedImage) loadMetadata() error {
 		ti.triggers = img.Triggers
 	case imageTypeLatestImage:
 		imageSClient, _ := getClients()
-		img, informationDatabaseURL, name, err := getLatestImage(
+		img, name, informationDatabaseURL, err := getLatestImage(
 			imageSClient, ti.specifier, true)
 		if err != nil {
 			return err

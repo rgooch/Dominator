@@ -10,7 +10,7 @@ import (
 )
 
 type imageData struct {
-	ExternalInformationURL string
+	InformationDatabaseURL string `json:",omitempty"`
 	*image.Image
 }
 
@@ -28,7 +28,7 @@ func showImageMetadata(imageName string) error {
 		return fmt.Errorf("no image")
 	} else {
 		data := imageData{
-			ExternalInformationURL: infoURL,
+			InformationDatabaseURL: infoURL,
 			Image:                  img,
 		}
 		return json.WriteWithIndent(os.Stdout, "    ", data)
