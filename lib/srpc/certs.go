@@ -2,6 +2,7 @@ package srpc
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"sync"
 	"time"
 
@@ -9,21 +10,39 @@ import (
 	"github.com/Cloud-Foundations/tricorder/go/tricorder/units"
 )
 
-func getEarliestCertExpiration(tlsConfig *tls.Config) time.Time {
-	var earliest time.Time
+func getEarliestCert(tlsConfig *tls.Config) *x509.Certificate {
 	if tlsConfig == nil {
-		return earliest
+		return nil
 	}
+	var earliestCert *x509.Certificate
 	for _, cert := range tlsConfig.Certificates {
 		if cert.Leaf != nil && !cert.Leaf.NotAfter.IsZero() {
-			if earliest.IsZero() {
-				earliest = cert.Leaf.NotAfter
-			} else if cert.Leaf.NotAfter.Before(earliest) {
-				earliest = cert.Leaf.NotAfter
+			if earliestCert == nil {
+				earliestCert = cert.Leaf
+			} else if cert.Leaf.NotAfter.Before(earliestCert.NotAfter) {
+				earliestCert = cert.Leaf
 			}
 		}
 	}
-	return earliest
+	return earliestCert
+}
+
+func getEarliestCertExpiration(tlsConfig *tls.Config) time.Time {
+	var earliest time.Time
+	earliestCert := getEarliestCert(tlsConfig)
+	if earliestCert == nil {
+		return earliest
+	}
+	return earliestCert.NotAfter
+}
+
+func getEarliestExpiringCertActivation(tlsConfig *tls.Config) time.Time {
+	var earliest time.Time
+	earliestCert := getEarliestCert(tlsConfig)
+	if earliestCert == nil {
+		return earliest
+	}
+	return earliestCert.NotBefore
 }
 
 func setupCertExpirationMetric(once sync.Once, tlsConfig **tls.Config,
@@ -38,5 +57,11 @@ func setupCertExpirationMetric(once sync.Once, tlsConfig **tls.Config,
 			},
 			units.None,
 			"expiration time of the certificate which will expire the soonest")
+		metricsDir.RegisterMetric("earliest-expiring-certificate-activation",
+			func() time.Time {
+				return getEarliestExpiringCertActivation(*tlsConfig)
+			},
+			units.None,
+			"activation time of the certificate which will expire the soonest")
 	})
 }

@@ -39,6 +39,8 @@ var (
 	imageServerPortNum = flag.Uint("imageServerPortNum",
 		constants.ImageServerPortNumber,
 		"Port number of image server")
+	informationDatabaseTemplate = flag.String("informationDatabaseTemplate", "",
+		"Optional template for generating HTML links into external information database")
 	lockCheckInterval = flag.Duration("lockCheckInterval", 2*time.Second,
 		"Interval between checks for lock timeouts")
 	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
@@ -115,8 +117,9 @@ func main() {
 		units.None, "number of images")
 	imgSrvRpcHtmlWriter, err := imageserverRpcd.Setup(
 		imageserverRpcd.Config{
-			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
-			ReplicationMaster:         imageServerAddress,
+			AllowUnauthenticatedReads:   *allowUnauthenticatedReads,
+			InformationDatabaseTemplate: *informationDatabaseTemplate,
+			ReplicationMaster:           imageServerAddress,
 		},
 		imageserverRpcd.Params{
 			ImageDataBase: imdb,
@@ -147,8 +150,9 @@ func main() {
 	logger.Printf("Service ready, opening listener on port: %d\n", *portNum)
 	err = httpd.StartServer(
 		httpd.Config{
-			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
-			PortNumber:                *portNum,
+			AllowUnauthenticatedReads:   *allowUnauthenticatedReads,
+			InformationDatabaseTemplate: *informationDatabaseTemplate,
+			PortNumber:                  *portNum,
 		},
 		httpd.Params{
 			ImageDataBase: imdb,

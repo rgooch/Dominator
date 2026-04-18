@@ -50,6 +50,10 @@ var (
 		"Name of delete filter file for addi, adds and diff subcommands")
 	expiresIn = flag.Duration("expiresIn", 0,
 		"How long before the image expires (auto deletes). Default: never")
+	extraKernelOptions = flag.String("extraKernelOptions", "",
+		"Options options to pass to kernel for RAW images")
+	extraPartitionsFilename = flag.String("extraPartitionsFilename", "",
+		"Optional filename containing extra partitions JSON for RAW images")
 	filterFile = flag.String("filterFile", "",
 		"Filter file to apply when adding, diffing or showing images")
 	fleetManagerHostname = flag.String("fleetManagerHostname", "",
@@ -79,6 +83,7 @@ var (
 	mdbServerPortNum = flag.Uint("mdbServerPortNum",
 		constants.SimpleMdbServerPortNumber,
 		"Port number of MDB server")
+	minBytes          flagutil.Size = 4 << 20
 	minFreeBytes      flagutil.Size = 4 << 20
 	objectAddInterval               = flag.Duration("objectAddInterval", 0,
 		"Interval between object uploads (for debugging)")
@@ -112,6 +117,7 @@ var (
 func init() {
 	flag.Var(&diffArgs, "diffArgs",
 		"Comma separated list of optional arguments to pass to diffing tool")
+	flag.Var(&minBytes, "minBytes", "Minimum number of bytes in raw image")
 	flag.Var(&minFreeBytes, "minFreeBytes",
 		"Minimum number of free bytes in raw image")
 	flag.Var(&objectCacheSize, "objectCacheSize",
