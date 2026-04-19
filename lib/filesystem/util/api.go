@@ -133,7 +133,7 @@ func SpliceComputedFiles(fs *filesystem.FileSystem,
 
 func Unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
 	rootDir string, logger log.Logger) error {
-	return unpack(fs, objectsGetter, rootDir, logger)
+	return unpack(fs, objectsGetter, rootDir, nil, logger)
 }
 
 func (bootInfo *BootInfoType) WriteBootloaderConfig(rootDir string,
