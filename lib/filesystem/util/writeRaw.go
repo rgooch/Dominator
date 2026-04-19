@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -227,7 +228,7 @@ func lookPath(rootDir, file string) (string, error) {
 func makeAndWriteRoot(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice, rootDevice string,
 	makeEfi bool, options WriteRawOptions, partitionPrefix string,
-	startPartition int, logger log.DebugLogger) error {
+	startPartition int, cancel <-chan os.Signal, logger log.DebugLogger) error {
 	unsupportedOptions, err := getUnsupportedOptions(fs, objectsGetter)
 	if err != nil {
 		return err
@@ -308,7 +309,7 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 			return wsyscall.Unmount(mountPoint, 0)
 		})
 	}
-	if err := Unpack(fs, objectsGetter, rootMount, logger); err != nil {
+	if err := unpack(fs, objectsGetter, rootMount, cancel, logger); err != nil {
 		return err
 	}
 	for _, dirname := range options.OverlayDirectories {
@@ -806,7 +807,7 @@ func writeToBlock(fs *filesystem.FileSystem,
 		return err
 	}
 	err = makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice, makeEfi,
-		options, "", index+1, logger)
+		options, "", index+1, nil, logger)
 	if err != nil {
 		return err
 	}
@@ -870,6 +871,9 @@ func writeToFile(fs *filesystem.FileSystem,
 		partition = 2
 		partitionString = "p2"
 	}
+	cancel := make(chan os.Signal, 1)
+	signal.Notify(cancel, syscall.SIGINT)
+	defer signal.Stop(cancel)
 	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
 		partitionString, time.Minute, logger)
 	if err != nil {
@@ -879,9 +883,13 @@ func writeToFile(fs *filesystem.FileSystem,
 		time.Minute, logger)
 	rootDevice := loopDevice + partitionString
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, makeEfi,
-		options, "p", partition+1, logger)
+		options, "p", partition+1, cancel, logger)
 	if err != nil {
 		return err
+	}
+	select {
+	case <-cancel:
+	default:
 	}
 	return os.Rename(tmpFilename, rawFilename)
 }
