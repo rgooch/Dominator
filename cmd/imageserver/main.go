@@ -31,7 +31,10 @@ var (
 		"If true, allow all users to call GetObjects method")
 	allowUnauthenticatedReads = flag.Bool("allowUnauthenticatedReads", false,
 		"If true, allow unauthenticated access to read-only methods")
-	debug    = flag.Bool("debug", false, "If true, show debugging output")
+	debug = flag.Bool("debug", false,
+		"If true, show debugging output")
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	imageDir = flag.String("imageDir", "/var/lib/imageserver",
 		"Name of image server data directory.")
 	imageServerHostname = flag.String("imageServerHostname", "",
@@ -73,8 +76,9 @@ func main() {
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
 	params := setupserver.Params{
-		Logger:         logger,
-		PermitInsecure: *permitInsecureMode,
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+		PermitInsecure:    *permitInsecureMode,
 	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)
