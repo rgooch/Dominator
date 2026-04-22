@@ -1,9 +1,22 @@
 package cleanup
 
 import (
+	"os"
+	"os/signal"
+
 	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
+
+func cleanupOnSignal(cf *CleanupFunctions, exitCode int, sig ...os.Signal) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, sig...)
+	go func() {
+		<-ch
+		cf.HardCleanup()
+		os.Exit(exitCode)
+	}()
+}
 
 func newCleanupFunctions(logger log.DebugLogger) *CleanupFunctions {
 	return &CleanupFunctions{
