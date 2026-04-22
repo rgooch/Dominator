@@ -2,8 +2,11 @@ package fsutil
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 )
 
 func appendToFile(destFilename string, reader io.Reader,
@@ -26,16 +29,14 @@ func appendToFile(destFilename string, reader io.Reader,
 	return nil
 }
 
-func appendFile(destFilename, sourceFilename string, mode os.FileMode) error {
+func appendFile(destFilename, sourceFilename string) error {
 	if _, err := os.Stat(destFilename); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Dest file doesn't exist, so just copy the file.
-			if mode == 0 {
-				var err error
-				mode, err = getFilePerms(sourceFilename)
-				if err != nil {
-					return err
-				}
+			var err error
+			mode, err := getFilePerms(sourceFilename)
+			if err != nil {
+				return err
 			}
 			return copyFile(destFilename, sourceFilename, mode, false)
 		}
@@ -47,4 +48,43 @@ func appendFile(destFilename, sourceFilename string, mode os.FileMode) error {
 	defer sourceFile.Close()
 	// Dest file exists, so append to it.
 	return appendToFile(destFilename, sourceFile, 0)
+}
+
+func appendTree(destDir, sourceDir string,
+	appendFunc func(dest, src string) error) error {
+	return filepath.WalkDir(sourceDir,
+		func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+
+			relPath, err := filepath.Rel(sourceDir, path)
+			if err != nil {
+				return err
+			}
+			destFilename := filepath.Join(destDir, relPath)
+
+			fileType := d.Type()
+			switch {
+			case fileType.IsDir():
+				// If path is a directory, create directory and return.
+				// WalkDir will automatically visit the children next.
+				if err := os.MkdirAll(destFilename, DirPerms); err != nil {
+					return err
+				}
+
+			case fileType.IsRegular():
+				if err := appendFunc(destFilename, path); err != nil {
+					return err
+				}
+
+			case fileType&fs.ModeSymlink != 0:
+				return errors.New("symlinks are not supported")
+
+			default:
+				return fmt.Errorf("unsupported file type: %s", fileType.String())
+			}
+
+			return nil
+		})
 }

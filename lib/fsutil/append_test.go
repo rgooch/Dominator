@@ -9,12 +9,33 @@ import (
 	"testing"
 )
 
-const (
-	sourceFileName = "source"
-	destFileName   = "dest"
-)
+func createBaseDirectory(t *testing.T, path string, perms os.FileMode) {
+	// Mark this function as Helper.
+	t.Helper()
+
+	dir := filepath.Dir(path)
+	info, err := os.Stat(dir)
+	if err == nil {
+		if !info.IsDir() {
+			t.Fatalf("path exists but is a file: %s", dir)
+		}
+	}
+
+	if !os.IsNotExist(err) {
+		t.Fatal(err.Error())
+	}
+
+	err = os.MkdirAll(dir, perms)
+	if err != nil {
+		t.Fatalf("error creating directory dir %s: %s", dir, err.Error())
+	}
+}
 
 func TestAppendFileNonExistingDestFile(t *testing.T) {
+	const (
+		sourceFileName = "dir1/source"
+		destFileName   = "dir2/dir3/dest"
+	)
 	// setup source file.
 	tmp := t.TempDir()
 
@@ -27,6 +48,7 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 	)
 	sourceFilePath := filepath.Join(tmp, sourceFileName)
 	destFilePath := filepath.Join(tmp, destFileName)
+	createBaseDirectory(t, sourceFilePath, 0755)
 	// create source file with data.
 	if err := copyToFile(sourceFilePath, 0600,
 		bytes.NewReader(sourceFileData), 0); err != nil {
@@ -39,15 +61,19 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 	if err == nil || !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("destfile exists already\n")
 	}
-	if err := AppendFile(destFilePath, sourceFilePath, 0); err != nil {
+	if err := AppendTree(filepath.Dir(destFilePath),
+		filepath.Dir(sourceFilePath)); err != nil {
 		t.Fatalf("error appending to file: %s\n", err.Error())
 	}
-	f, _ := os.OpenFile(destFilePath, os.O_RDONLY, 0)
+	// Since Destination file is not present, the entire Tree will be
+	// created with source file.
+	finalDestPath := filepath.Join(tmp, "dir2/dir3/source")
+	f, _ := os.OpenFile(finalDestPath, os.O_RDONLY, 0)
 	d, _ := io.ReadAll(f)
 	t.Logf("file content is \n%s\n", string(d))
 
 	// check file perm of dest, it should be same as source.
-	mode, err := getFilePerms(destFilePath)
+	mode, err := getFilePerms(finalDestPath)
 	if err != nil {
 		t.Fatalf("error getting dest file perms %s\n", err.Error())
 	}
@@ -59,7 +85,7 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 		)
 	}
 	// dest file should exist.
-	same, err := CompareFile(expectedDestFileData, destFilePath)
+	same, err := CompareFile(expectedDestFileData, finalDestPath)
 	if err != nil {
 		t.Fatalf("error appending to file: %s\n", err.Error())
 	}
@@ -70,6 +96,10 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 
 func TestAppendFileWithExistingDestFile(t *testing.T) {
 	// setup source file.
+	const (
+		sourceFileName = "dir1/dir2/dir3/source"
+		destFileName   = "dir4/dir2/dir3/dest"
+	)
 	tmp := t.TempDir()
 	var (
 		sourceFileData = []byte(
@@ -80,6 +110,8 @@ func TestAppendFileWithExistingDestFile(t *testing.T) {
 	)
 	sourceFilePath := filepath.Join(tmp, sourceFileName)
 	destFilePath := filepath.Join(tmp, destFileName)
+	createBaseDirectory(t, sourceFilePath, 0755)
+	createBaseDirectory(t, destFilePath, 0755)
 	// create source file with data.
 	if err := copyToFile(
 		sourceFilePath,
@@ -99,7 +131,7 @@ func TestAppendFileWithExistingDestFile(t *testing.T) {
 		t.Fatalf("error creating dest file %s: %s\n", destFilePath, err.Error())
 	}
 
-	if err := AppendFile(destFilePath, sourceFilePath, 0); err != nil {
+	if err := AppendFile(destFilePath, sourceFilePath); err != nil {
 		t.Fatalf("error appending to file: %s\n", err.Error())
 	}
 	f, _ := os.OpenFile(destFilePath, os.O_RDONLY, 0)

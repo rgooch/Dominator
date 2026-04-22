@@ -305,12 +305,7 @@ func appendFiles(manifestDir, dirname, rootDir string, buildLog io.Writer) error
 		}
 		return err
 	}
-
-	cf := func(destFilename, sourceFilename string, mode os.FileMode) error {
-		return fsutil.AppendFile(destFilename, sourceFilename, mode)
-	}
-	// Supporting append only for regular files.
-	if err := fsutil.CopyFilesTreeWithCopyFunc(rootDir, sourceDir, cf); err != nil {
+	if err := fsutil.AppendTree(rootDir, sourceDir); err != nil {
 		return fmt.Errorf("error appending %s: %s", dirname, err)
 	}
 	fmt.Fprintf(buildLog, "\nAppended %s tree in %s\n", dirname, format.Duration(time.Since(startTime)))
