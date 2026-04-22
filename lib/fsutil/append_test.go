@@ -9,14 +9,15 @@ import (
 	"testing"
 )
 
+const (
+	sourceFileName = "source"
+	destFileName   = "dest"
+)
+
 func TestAppendFileNonExistingDestFile(t *testing.T) {
 	// setup source file.
 	tmp := t.TempDir()
 
-	const (
-		sourceFileName = "source"
-		destFileName   = "dest"
-	)
 	var (
 		sourceFileData = []byte(
 			"#/usr/bin/bash\nVAR1=$(which bash)\necho $VAR1\nthis is \n\ttest data\n",
@@ -70,11 +71,6 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 func TestAppendFileWithExistingDestFile(t *testing.T) {
 	// setup source file.
 	tmp := t.TempDir()
-
-	const (
-		sourceFileName = "source"
-		destFileName   = "dest"
-	)
 	var (
 		sourceFileData = []byte(
 			"#/usr/bin/bash\nVAR1=$(which bash)\necho $VAR1\nthis is \n\ttest data\n",

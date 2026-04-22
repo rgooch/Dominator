@@ -6,16 +6,24 @@ import (
 	"os"
 )
 
-func appendToFile(destFilename string, reader io.Reader, length uint64) error {
+func appendToFile(destFilename string, reader io.Reader,
+	length uint64) (err error) {
 	destFile, err := os.OpenFile(destFilename, os.O_WRONLY|os.O_APPEND, 0)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() {
+		closeError := destFile.Close()
+		// If our function succeeded, but the close failed,
+		// return the close error instead.
+		if err == nil && closeError != nil {
+			err = closeError
+		}
+	}()
 	if err := copyToWriter(destFile, destFilename, reader, length); err != nil {
 		return err
 	}
-	return destFile.Close()
+	return nil
 }
 
 func appendFile(destFilename, sourceFilename string, mode os.FileMode) error {
