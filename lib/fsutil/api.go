@@ -23,6 +23,15 @@ var (
 	ErrorChecksumMismatch = errors.New("checksum mismatch")
 )
 
+// AppemdFile will append data from the sourceFilename to destFilename.
+// If destFilename does not exist, it is created with permissions
+// copied from sourceFilename. If there are any errors, then destFilename
+// may have partial data appended.
+// AppendFile is not safe to call concurrently for the same file.
+func AppendFile(destFilename, sourceFilename string, mode os.FileMode) error {
+	return appendFile(destFilename, sourceFilename, mode, false)
+}
+
 // CompareFile will read and compare the content of a file and buffer and will
 // return true if the contents are the same else false.
 func CompareFile(buffer []byte, filename string) (bool, error) {
@@ -83,6 +92,14 @@ func CopyTree(destDir, sourceDir string) error {
 // are ignored.
 func CopyFilesTree(destDir, sourceDir string) error {
 	return copyTree(destDir, sourceDir, false, CopyFile)
+}
+
+// CopyFilesTreeWithCopyFunc is similar to CopyFilesTree except it uses a specified copy
+// function for copying regular files.
+func CopyFilesTreeWithCopyFunc(destDir, souceDir string,
+	copyFunc func(destFilename, sourceFilename string,
+		mode os.FileMode) error) error {
+	return copyTree(destDir, souceDir, false, copyFunc)
 }
 
 // CopyTreeWithCopyFunc is similar to CopyTree except it uses a specified copy
