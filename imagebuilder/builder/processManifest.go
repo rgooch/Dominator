@@ -229,10 +229,10 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return fmt.Errorf("error copying in /etc/resolv.conf: %s", err)
 	}
-	if err := appendFiles(manifestDir, "files.append", rootDir, buildLog); err != nil {
+	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
-	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
+	if err := appendFiles(manifestDir, "files.append", rootDir, buildLog); err != nil {
 		return err
 	}
 	err = runScripts(ctx, g, manifestDir, "pre-install-scripts", rootDir,
