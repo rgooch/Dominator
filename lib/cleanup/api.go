@@ -1,6 +1,8 @@
 package cleanup
 
 import (
+	"os"
+
 	"github.com/Cloud-Foundations/Dominator/lib/list"
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 )
@@ -11,6 +13,13 @@ type CleanupFunctions struct {
 }
 
 type Function func() error
+
+// CleanupOnSignal will call the HardCleanup() method for the specified cleanup
+// functions when one of the specified signals is caught and then exits the
+// programme with the specified exitCode.
+func CleanupOnSignal(cf *CleanupFunctions, exitCode int, sig ...os.Signal) {
+	cleanupOnSignal(cf, exitCode, sig...)
+}
 
 // NewCleanupFunctions creates a container for cleanup functions.
 func NewCleanupFunctions(logger log.DebugLogger) *CleanupFunctions {
