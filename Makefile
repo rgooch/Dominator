@@ -1,32 +1,3 @@
-UPSTREAM_REPO := https://github.com/Cloud-Foundations/Dominator.git
-
-build-info:
-	@git fetch --quiet --tags $(UPSTREAM_REPO) 2>/dev/null || true
-	@version=$$(git describe --tags --always --match 'v[0-9]*.[0-9]*.[0-9]*'); \
-	raw_origin=$$(git remote get-url origin 2>/dev/null || echo unknown); \
-	origin=$$(echo "$$raw_origin" | sed -e 's|^git@[^:]*:||' -e 's|^https://github.com/||' -e 's|\.git$$||'); \
-	branch=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
-	case "$$raw_origin" in *Cloud-Foundations*) is_fork=false;; *) is_fork=true;; esac; \
-	if [ "$$is_fork" = false ] && [ "$$branch" = "master" ]; then \
-		behind=0; \
-	else \
-		upstream_sha=$$(git ls-remote $(UPSTREAM_REPO) refs/heads/master 2>/dev/null | cut -f1); \
-		if [ -n "$$upstream_sha" ]; then \
-			git fetch --quiet $(UPSTREAM_REPO) master 2>/dev/null; \
-			behind=$$(git rev-list --count HEAD..$$upstream_sha 2>/dev/null || echo -1); \
-		else \
-			behind=-1; \
-		fi; \
-	fi; \
-	echo "version=$$version"   >  lib/version/BUILD_INFO; \
-	echo "origin=$$origin"     >> lib/version/BUILD_INFO; \
-	echo "branch=$$branch"     >> lib/version/BUILD_INFO; \
-	echo "behind=$$behind"     >> lib/version/BUILD_INFO; \
-	echo "fork=$$is_fork"      >> lib/version/BUILD_INFO
-
-generate: build-info
-
-
 all: generate
 	CGO_ENABLED=0 go install ./cmd/*
 	@cd c; make
@@ -90,6 +61,31 @@ subd.tarball: generate
 	@./scripts/make-tarball subd           \
 		-C cmd/subd  set-owner         \
 		-C $(GOPATH) bin/run-in-mntns
+
+
+UPSTREAM_REPO := https://github.com/Cloud-Foundations/Dominator.git
+
+build-info:
+	@version=$$(git describe --tags --always --match 'v[0-9]*.[0-9]*.[0-9]*'); \
+	raw_origin=$$(git remote get-url origin 2>/dev/null || echo unknown); \
+	origin=$$(echo "$$raw_origin" | sed -e 's|^git@[^:]*:||' -e 's|^https://github.com/||' -e 's|\.git$$||'); \
+	branch=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown); \
+	case "$$raw_origin" in *Cloud-Foundations*) is_fork=false;; *) is_fork=true;; esac; \
+	if [ "$$is_fork" = false ] && [ "$$branch" = "master" ]; then \
+		behind=0; \
+	elif [ -n "$(WITH_UPSTREAM)" ] && \
+		git fetch --quiet $(UPSTREAM_REPO) master 2>/dev/null; then \
+		behind=$$(git rev-list --count HEAD..FETCH_HEAD 2>/dev/null || echo -1); \
+	else \
+		behind=-1; \
+	fi; \
+	echo "version=$$version"   >  lib/version/BUILD_INFO; \
+	echo "origin=$$origin"     >> lib/version/BUILD_INFO; \
+	echo "branch=$$branch"     >> lib/version/BUILD_INFO; \
+	echo "behind=$$behind"     >> lib/version/BUILD_INFO; \
+	echo "fork=$$is_fork"      >> lib/version/BUILD_INFO
+
+generate: build-info
 
 
 format:

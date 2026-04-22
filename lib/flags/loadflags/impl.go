@@ -14,26 +14,6 @@ import (
 
 const systemDir = "/etc/config"
 
-func registerVersionFlag(name string) {
-	flag.BoolFunc("version", "Print version information and exit", func(string) error {
-		info := version.Get()
-		fmt.Printf("%s %s\n", name, info.Version)
-		fmt.Printf("  Commit: %s\n", info.GitCommit)
-		if info.IsFork {
-			fmt.Printf("  Origin: %s\n", info.GitOrigin)
-		}
-		if info.GitBranch != "master" {
-			fmt.Printf("  Branch: %s\n", info.GitBranch)
-		}
-		if info.CommitsBehind > 0 {
-			fmt.Printf("  Behind: %d commits\n", info.CommitsBehind)
-		}
-		fmt.Printf("  Built:  %s\n", info.BuildDate)
-		fmt.Printf("  Go:     %s\n", info.GoVersion)
-		os.Exit(0)
-		return nil
-	})
-}
 func loadFlags(dirname string) error {
 	err := loadFlagsFromFile(filepath.Join(dirname, "flags.default"))
 	if err != nil {
@@ -77,9 +57,36 @@ func loadFlagsFromFile(filename string) error {
 }
 
 func loadForCli(progName string) error {
+	registerVersionFlag(progName)
 	if err := loadFlags(filepath.Join(systemDir, progName)); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", err)
 	}
 	return loadFlags(
 		filepath.Join(os.Getenv("HOME"), ".config", progName))
+}
+
+func loadForDaemon(progName string) error {
+	registerVersionFlag(progName)
+	return loadFlags(filepath.Join("/etc", progName))
+}
+
+func registerVersionFlag(name string) {
+	flag.BoolFunc("version", "Print version information and exit",
+		func(string) error {
+			info := version.Get()
+			out := flag.CommandLine.Output()
+			fmt.Fprintf(out, "%s %s\n", name, info.Version)
+			fmt.Fprintf(out, "  Commit: %s\n", info.GitCommit)
+			if info.IsFork {
+				fmt.Fprintf(out, "  Origin: %s\n", info.GitOrigin)
+			}
+			if info.GitBranch != "master" {
+				fmt.Fprintf(out, "  Branch: %s\n", info.GitBranch)
+			}
+			fmt.Fprintf(out, "  Behind: %s\n", info.Behind())
+			fmt.Fprintf(out, "  Built:  %s\n", info.BuildDate)
+			fmt.Fprintf(out, "  Go:     %s\n", info.GoVersion)
+			os.Exit(0)
+			return nil
+		})
 }

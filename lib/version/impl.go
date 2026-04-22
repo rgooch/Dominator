@@ -2,7 +2,6 @@ package version
 
 import (
 	_ "embed"
-	"fmt"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -42,12 +41,33 @@ func get() Info {
 		IsFork:        bi.isFork,
 		BuildDate:     vcs.buildTime,
 		GoVersion:     runtime.Version(),
-		Dirty:         vcs.dirty,
 	}
 }
 
-func infoString(i Info) string {
-	return fmt.Sprintf("%s (built: %s)", i.Version, i.BuildDate)
+func (i Info) string() string {
+	parts := []string{"commit: " + i.GitCommit}
+	if i.IsFork {
+		parts = append(parts, "origin: "+i.GitOrigin)
+	}
+	if i.GitBranch != "master" {
+		parts = append(parts, "branch: "+i.GitBranch)
+	}
+	parts = append(parts,
+		"behind: "+i.Behind(),
+		"built: "+i.BuildDate,
+		"go: "+i.GoVersion)
+	return i.Version + " (" + strings.Join(parts, ", ") + ")"
+}
+
+func (i Info) behind() string {
+	switch {
+	case i.CommitsBehind < 0:
+		return "unknown"
+	case i.CommitsBehind == 0:
+		return "up to date"
+	default:
+		return strconv.Itoa(i.CommitsBehind) + " commits"
+	}
 }
 
 func parseBuildInfo() buildInfo {

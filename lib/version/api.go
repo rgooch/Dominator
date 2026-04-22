@@ -2,15 +2,14 @@ package version
 
 // Info contains version information for a binary.
 type Info struct {
-	Version       string `json:"version"`
-	GitCommit     string `json:"gitCommit"`
-	GitOrigin     string `json:"gitOrigin"`
-	GitBranch     string `json:"gitBranch"`
-	CommitsBehind int    `json:"commitsBehind"`
-	IsFork        bool   `json:"isFork"`
-	BuildDate     string `json:"buildDate"`
-	GoVersion     string `json:"goVersion"`
-	Dirty         bool   `json:"dirty"`
+	Version       string
+	GitCommit     string
+	GitOrigin     string
+	GitBranch     string
+	CommitsBehind int
+	IsFork        bool
+	BuildDate     string
+	GoVersion     string
 }
 
 // Get returns the version information for the current binary.
@@ -18,7 +17,14 @@ func Get() Info {
 	return get()
 }
 
-// String returns a human-readable version string.
+// String returns a single-line human-readable version string.
 func (i Info) String() string {
-	return infoString(i)
+	return i.string()
+}
+
+// Behind returns a human-readable description of how far behind upstream
+// the build is: "unknown" if the check was not run, "up to date" if on the
+// upstream tip, or "N commits" otherwise.
+func (i Info) Behind() string {
+	return i.behind()
 }
