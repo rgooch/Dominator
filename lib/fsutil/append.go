@@ -18,10 +18,10 @@ func appendToFile(destFilename string, reader io.Reader, length uint64) error {
 	return destFile.Close()
 }
 
-func appendFile(destFilename, sourceFilename string, mode os.FileMode, exclusive bool) error {
+func appendFile(destFilename, sourceFilename string, mode os.FileMode) error {
 	if _, err := os.Stat(destFilename); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			// Dest file doesn't exist, so just copy the file
+			// Dest file doesn't exist, so just copy the file.
 			if mode == 0 {
 				var err error
 				mode, err = getFilePerms(sourceFilename)
@@ -29,7 +29,7 @@ func appendFile(destFilename, sourceFilename string, mode os.FileMode, exclusive
 					return err
 				}
 			}
-			return copyFile(destFilename, sourceFilename, mode, exclusive)
+			return copyFile(destFilename, sourceFilename, mode, false)
 		}
 	}
 	sourceFile, err := os.Open(sourceFilename)
@@ -37,6 +37,6 @@ func appendFile(destFilename, sourceFilename string, mode os.FileMode, exclusive
 		return errors.New(sourceFilename + ": " + err.Error())
 	}
 	defer sourceFile.Close()
-	// Dest file exists, so append to it
+	// Dest file exists, so append to it.
 	return appendToFile(destFilename, sourceFile, 0)
 }

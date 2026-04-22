@@ -232,7 +232,8 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
-	if err := appendFiles(manifestDir, "files.append", rootDir, buildLog); err != nil {
+	err = appendFiles(manifestDir, "files.append", rootDir, buildLog)
+	if err != nil {
 		return err
 	}
 	err = runScripts(ctx, g, manifestDir, "pre-install-scripts", rootDir,
@@ -261,7 +262,9 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return err
 	}
-	if err := appendFiles(manifestDir, "post-install-files.append", rootDir, buildLog); err != nil {
+	err = appendFiles(manifestDir, "post-install-files.append",
+		rootDir, buildLog)
+	if err != nil {
 		return err
 	}
 	err = runScripts(ctx, g, manifestDir, "scripts", rootDir, envGetter,
@@ -306,7 +309,7 @@ func appendFiles(manifestDir, dirname, rootDir string, buildLog io.Writer) error
 	cf := func(destFilename, sourceFilename string, mode os.FileMode) error {
 		return fsutil.AppendFile(destFilename, sourceFilename, mode)
 	}
-	// Supporting append only for regular files
+	// Supporting append only for regular files.
 	if err := fsutil.CopyFilesTreeWithCopyFunc(rootDir, sourceDir, cf); err != nil {
 		return fmt.Errorf("error appending %s: %s", dirname, err)
 	}
