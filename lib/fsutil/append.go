@@ -57,7 +57,6 @@ func appendTree(destDir, sourceDir string,
 			if err != nil {
 				return err
 			}
-
 			relPath, err := filepath.Rel(sourceDir, path)
 			if err != nil {
 				return err
@@ -72,19 +71,15 @@ func appendTree(destDir, sourceDir string,
 				if err := os.MkdirAll(destFilename, DirPerms); err != nil {
 					return err
 				}
-
 			case fileType.IsRegular():
 				if err := appendFunc(destFilename, path); err != nil {
 					return err
 				}
-
 			case fileType&fs.ModeSymlink != 0:
 				return errors.New("symlinks are not supported")
-
 			default:
 				return fmt.Errorf("unsupported file type: %s", fileType.String())
 			}
-
 			return nil
 		})
 }

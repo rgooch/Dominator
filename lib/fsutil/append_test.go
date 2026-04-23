@@ -12,7 +12,6 @@ import (
 func createBaseDirectory(t *testing.T, path string, perms os.FileMode) {
 	// Mark this function as Helper.
 	t.Helper()
-
 	dir := filepath.Dir(path)
 	info, err := os.Stat(dir)
 	if err == nil {
@@ -20,11 +19,9 @@ func createBaseDirectory(t *testing.T, path string, perms os.FileMode) {
 			t.Fatalf("path exists but is a file: %s", dir)
 		}
 	}
-
 	if !os.IsNotExist(err) {
 		t.Fatal(err.Error())
 	}
-
 	err = os.MkdirAll(dir, perms)
 	if err != nil {
 		t.Fatalf("error creating directory dir %s: %s", dir, err.Error())
@@ -38,7 +35,6 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 	)
 	// setup source file.
 	tmp := t.TempDir()
-
 	var (
 		sourceFileData = []byte(
 			"#/usr/bin/bash\nVAR1=$(which bash)\necho $VAR1\nthis is \n\ttest data\n",
@@ -55,7 +51,6 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 		t.Fatalf("error creating source file %s: %s\n", sourceFilePath, err.Error())
 	}
 	// skipping creation of dest file path.
-
 	// check dest file doesn't exist before append.
 	_, err := os.Stat(destFilePath)
 	if err == nil || !errors.Is(err, os.ErrNotExist) {
@@ -71,7 +66,6 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 	f, _ := os.OpenFile(finalDestPath, os.O_RDONLY, 0)
 	d, _ := io.ReadAll(f)
 	t.Logf("file content is \n%s\n", string(d))
-
 	// check file perm of dest, it should be same as source.
 	mode, err := getFilePerms(finalDestPath)
 	if err != nil {
@@ -130,14 +124,12 @@ func TestAppendFileWithExistingDestFile(t *testing.T) {
 	); err != nil {
 		t.Fatalf("error creating dest file %s: %s\n", destFilePath, err.Error())
 	}
-
 	if err := AppendFile(destFilePath, sourceFilePath); err != nil {
 		t.Fatalf("error appending to file: %s\n", err.Error())
 	}
 	f, _ := os.OpenFile(destFilePath, os.O_RDONLY, 0)
 	d, _ := io.ReadAll(f)
 	t.Logf("file content is \n%s\n", string(d))
-
 	// dest file should exist.
 	same, err := CompareFile(expectedDestFileData, destFilePath)
 	if err != nil {
