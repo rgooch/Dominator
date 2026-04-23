@@ -232,6 +232,10 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err := copyFiles(manifestDir, "files", rootDir, buildLog); err != nil {
 		return err
 	}
+	err = appendFiles(manifestDir, "files.append", rootDir, buildLog)
+	if err != nil {
+		return err
+	}
 	err = runScripts(ctx, g, manifestDir, "pre-install-scripts", rootDir,
 		envGetter, buildLog)
 	if err != nil {
@@ -255,6 +259,11 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 		return errors.New("error installing packages: " + err.Error())
 	}
 	err = copyFiles(manifestDir, "post-install-files", rootDir, buildLog)
+	if err != nil {
+		return err
+	}
+	err = appendFiles(manifestDir, "post-install-files.append",
+		rootDir, buildLog)
 	if err != nil {
 		return err
 	}
@@ -282,6 +291,24 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func appendFiles(manifestDir, dirname, rootDir string, buildLog io.Writer) error {
+	startTime := time.Now()
+	sourceDir := filepath.Join(manifestDir, dirname)
+	_, err := os.Open(sourceDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(buildLog, "No %s directory\n", dirname)
+			return nil
+		}
+		return err
+	}
+	if err := fsutil.AppendTree(rootDir, sourceDir); err != nil {
+		return fmt.Errorf("error appending %s: %s", dirname, err)
+	}
+	fmt.Fprintf(buildLog, "\nAppended %s tree in %s\n", dirname, format.Duration(time.Since(startTime)))
 	return nil
 }
 
