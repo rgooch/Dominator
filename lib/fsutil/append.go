@@ -62,7 +62,6 @@ func appendTree(destDir, sourceDir string,
 				return err
 			}
 			destFilename := filepath.Join(destDir, relPath)
-
 			fileType := d.Type()
 			switch {
 			case fileType.IsDir():
