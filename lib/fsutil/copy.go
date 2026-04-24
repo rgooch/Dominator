@@ -141,11 +141,11 @@ func copyTree(destDir, sourceDir string, allTypes bool,
 func copyFile(destFilename, sourceFilename string, mode os.FileMode,
 	exclusive bool) error {
 	if mode == 0 {
-		var stat wsyscall.Stat_t
-		if err := wsyscall.Stat(sourceFilename, &stat); err != nil {
-			return errors.New(sourceFilename + ": " + err.Error())
+		var err error
+		mode, err = getFilePerms(sourceFilename)
+		if err != nil {
+			return err
 		}
-		mode = os.FileMode(stat.Mode & wsyscall.S_IFMT)
 	}
 	sourceFile, err := os.Open(sourceFilename)
 	if err != nil {

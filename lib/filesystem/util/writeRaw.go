@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Cloud-Foundations/Dominator/lib/backoffdelay"
+	"github.com/Cloud-Foundations/Dominator/lib/cleanup"
 	"github.com/Cloud-Foundations/Dominator/lib/constants"
 	"github.com/Cloud-Foundations/Dominator/lib/filesystem"
 	"github.com/Cloud-Foundations/Dominator/lib/format"
@@ -27,7 +29,9 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
 	"github.com/Cloud-Foundations/Dominator/lib/wsyscall"
+	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 const (
@@ -223,7 +227,8 @@ func lookPath(rootDir, file string) (string, error) {
 
 func makeAndWriteRoot(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice, rootDevice string,
-	makeEfi bool, options WriteRawOptions, logger log.DebugLogger) error {
+	makeEfi bool, options WriteRawOptions, partitionPrefix string,
+	startPartition int, cancel <-chan os.Signal, logger log.DebugLogger) error {
 	unsupportedOptions, err := getUnsupportedOptions(fs, objectsGetter)
 	if err != nil {
 		return err
@@ -263,6 +268,11 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return err
 	}
+	err = makeExtraFileSystems(bootDevice, partitionPrefix, startPartition,
+		options, logger)
+	if err != nil {
+		return err
+	}
 	rootMount, err := ioutil.TempDir("", "write-raw-image")
 	if err != nil {
 		return err
@@ -272,14 +282,34 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	if err != nil {
 		return fmt.Errorf("error mounting: %s", rootDevice)
 	}
+	cleanupFunctions := cleanup.NewCleanupFunctions(logger)
+	cleanupFunctions.Add(func() error {
+		return wsyscall.Unmount(rootMount, 0)
+	})
 	doUnmount := true
 	defer func() {
 		if doUnmount {
-			wsyscall.Unmount(rootMount, 0)
+			cleanupFunctions.HardCleanup()
 		}
 	}()
 	os.RemoveAll(filepath.Join(rootMount, "lost+found"))
-	if err := Unpack(fs, objectsGetter, rootMount, logger); err != nil {
+	for index, partition := range options.ExtraPartitions {
+		device := fmt.Sprintf("%s%s%d",
+			bootDevice, partitionPrefix, startPartition+index)
+		mountPoint := filepath.Join(rootMount,
+			filepath.Clean(partition.MountPoint))
+		if err := os.MkdirAll(mountPoint, fsutil.DirPerms); err != nil {
+			return err
+		}
+		err := wsyscall.Mount(device, mountPoint, "ext4", 0, "")
+		if err != nil {
+			return err
+		}
+		cleanupFunctions.Add(func() error {
+			return wsyscall.Unmount(mountPoint, 0)
+		})
+	}
+	if err := unpack(fs, objectsGetter, rootMount, cancel, logger); err != nil {
 		return err
 	}
 	for _, dirname := range options.OverlayDirectories {
@@ -336,12 +366,12 @@ func makeAndWriteRoot(fs *filesystem.FileSystem,
 	}
 	doUnmount = false
 	startTime := time.Now()
-	if err := wsyscall.Unmount(rootMount, 0); err != nil {
-		return err
+	if err := cleanupFunctions.HardCleanup(); err != nil {
+		return fmt.Errorf("cleanup error: %w", err)
 	}
 	if timeTaken := time.Since(startTime); timeTaken > 10*time.Millisecond {
-		logger.Debugf(0, "Unmounted: %s in %s\n",
-			rootDevice, format.Duration(time.Since(startTime)))
+		logger.Debugf(0, "Unmounted in %s\n",
+			format.Duration(time.Since(startTime)))
 	}
 	return nil
 }
@@ -432,6 +462,31 @@ func makeExt4fs(deviceName string, params MakeExt4fsParams,
 	logger.Printf("Made %s Ext4 file-system on: %s in %s\n",
 		format.FormatBytes(params.Size), deviceName,
 		format.Duration(time.Since(startTime)))
+	return nil
+}
+
+func makeExtraFileSystems(bootDevice, partitionPrefix string,
+	startPartition int, options WriteRawOptions, logger log.Logger) error {
+	for index, partition := range options.ExtraPartitions {
+		if partition.FileSystemType != installer.FileSystemTypeExt4 {
+			return fmt.Errorf("extra partition: %d is not ext4fs", index)
+		}
+		err := makeExt4fs(fmt.Sprintf("%s%s%d",
+			bootDevice, partitionPrefix, startPartition+index),
+			MakeExt4fsParams{
+				BytesPerInode:            uint64(partition.BytesPerInode),
+				Label:                    partition.FileSystemLabel,
+				NoDiscard:                true,
+				ReservedBlocksPercentage: uint16(partition.ReservedBlocksPercentage),
+				RootGroupId:              partition.RootGroupId,
+				RootUserId:               partition.RootUserId,
+				Size:                     partition.MinimumBytes,
+			},
+			logger)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -706,27 +761,57 @@ func writeImageName(mountPoint, imageName string) error {
 	return fsutil.CopyToFile(pathname, fsutil.PublicFilePerms, buffer, 0)
 }
 
+func writeMbr(filename string, tableType mbr.TableType, rootSize uint64,
+	options WriteRawOptions) error {
+	if len(options.ExtraPartitions) < 1 {
+		return mbr.WriteDefault(filename, tableType)
+	}
+	partitions := []mbr.Partition{{Size: types.Bytes(rootSize), Type: "ext2"}}
+	for _, extraPartition := range options.ExtraPartitions {
+		partitions = append(partitions, mbr.Partition{
+			Size: types.Bytes(extraPartition.MinimumBytes),
+			Type: extraPartition.FileSystemType.String(),
+		})
+	}
+	return mbr.Write(filename, tableType, partitions)
+}
+
 func writeToBlock(fs *filesystem.FileSystem,
 	objectsGetter objectserver.ObjectsGetter, bootDevice string,
 	tableType mbr.TableType, options WriteRawOptions,
 	logger log.DebugLogger) error {
-	if err := mbr.WriteDefault(bootDevice, tableType); err != nil {
+	usageEstimate := fs.EstimateUsage(0)
+	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	if options.MinimumFreeBytes < 1 &&
+		rootBytes >= uint64(options.MinimumBytes) {
+		return fmt.Errorf("root file-system too large")
+	}
+	rootBytes += options.MinimumFreeBytes
+	if options.MinimumBytes > types.Bytes(rootBytes) {
+		rootBytes = uint64(options.MinimumBytes)
+	}
+	if err := writeMbr(bootDevice, tableType, rootBytes, options); err != nil {
 		return err
 	}
-	index := "1"
+	index := 1
+	indexString := "1"
 	var makeEfi bool
 	if tableType == mbr.TABLE_TYPE_GPT {
-		index = "2"
+		index = 2
+		indexString = "2"
 		makeEfi = true
 	}
-	rootDevice, err := waitForRootPartition(bootDevice, index,
+	rootDevice, err := waitForRootPartition(bootDevice, indexString,
 		options.PartitionWaitTimeout)
 	if err != nil {
 		return err
-	} else {
-		return makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice,
-			makeEfi, options, logger)
 	}
+	err = makeAndWriteRoot(fs, objectsGetter, bootDevice, rootDevice, makeEfi,
+		options, "", index+1, nil, logger)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func writeToFile(fs *filesystem.FileSystem,
@@ -741,10 +826,21 @@ func writeToFile(fs *filesystem.FileSystem,
 		defer os.Remove(tmpFilename)
 	}
 	usageEstimate := fs.EstimateUsage(0)
-	minBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
-	minBytes += options.MinimumFreeBytes
+	rootBytes := usageEstimate + usageEstimate>>3 // 12% extra for good luck.
+	if options.MinimumFreeBytes < 1 &&
+		rootBytes >= uint64(options.MinimumBytes) {
+		return fmt.Errorf("root file-system too large")
+	}
+	rootBytes += options.MinimumFreeBytes
+	if options.MinimumBytes > types.Bytes(rootBytes) {
+		rootBytes = uint64(options.MinimumBytes)
+	}
+	minBytes := rootBytes + 1<<20 // Leave bottom 1 MiB free.
 	if tableType == mbr.TABLE_TYPE_GPT {
 		minBytes += 130 << 20 // Leave space for the EFI partition.
+	}
+	for _, extraPartition := range options.ExtraPartitions {
+		minBytes += extraPartition.MinimumBytes
 	}
 	if options.RoundupPower < 24 {
 		options.RoundupPower = 24 // 16 MiB.
@@ -764,27 +860,36 @@ func writeToFile(fs *filesystem.FileSystem,
 				tmpFilename, err)
 		}
 	}
-	if err := mbr.WriteDefault(tmpFilename, tableType); err != nil {
+	if err := writeMbr(tmpFilename, tableType, rootBytes, options); err != nil {
 		return err
 	}
-	partition := "p1"
+	partition := 1
+	partitionString := "p1"
 	var makeEfi bool
 	if tableType == mbr.TABLE_TYPE_GPT {
 		makeEfi = true
-		partition = "p2"
+		partition = 2
+		partitionString = "p2"
 	}
+	cancel := make(chan os.Signal, 1)
+	signal.Notify(cancel, syscall.SIGINT)
+	defer signal.Stop(cancel)
 	loopDevice, err := fsutil.LoopbackSetupAndWaitForPartition(tmpFilename,
-		partition, time.Minute, logger)
+		partitionString, time.Minute, logger)
 	if err != nil {
 		return err
 	}
-	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partition,
+	defer fsutil.LoopbackDeleteAndWaitForPartition(loopDevice, partitionString,
 		time.Minute, logger)
-	rootDevice := loopDevice + partition
+	rootDevice := loopDevice + partitionString
 	err = makeAndWriteRoot(fs, objectsGetter, loopDevice, rootDevice, makeEfi,
-		options, logger)
+		options, "p", partition+1, cancel, logger)
 	if err != nil {
 		return err
+	}
+	select {
+	case <-cancel:
+	default:
 	}
 	return os.Rename(tmpFilename, rawFilename)
 }

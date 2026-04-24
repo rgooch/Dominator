@@ -31,7 +31,10 @@ var (
 		"If true, allow all users to call GetObjects method")
 	allowUnauthenticatedReads = flag.Bool("allowUnauthenticatedReads", false,
 		"If true, allow unauthenticated access to read-only methods")
-	debug    = flag.Bool("debug", false, "If true, show debugging output")
+	debug = flag.Bool("debug", false,
+		"If true, show debugging output")
+	generateMissingWebcert = flag.Bool("generateMissingWebcert", false,
+		"If true, generate a missing webcert (for SRPC server)")
 	imageDir = flag.String("imageDir", "/var/lib/imageserver",
 		"Name of image server data directory.")
 	imageServerHostname = flag.String("imageServerHostname", "",
@@ -39,6 +42,8 @@ var (
 	imageServerPortNum = flag.Uint("imageServerPortNum",
 		constants.ImageServerPortNumber,
 		"Port number of image server")
+	informationDatabaseTemplate = flag.String("informationDatabaseTemplate", "",
+		"Optional template for generating HTML links into external information database")
 	lockCheckInterval = flag.Duration("lockCheckInterval", 2*time.Second,
 		"Interval between checks for lock timeouts")
 	lockLogTimeout = flag.Duration("lockLogTimeout", 5*time.Second,
@@ -71,8 +76,9 @@ func main() {
 	logger := serverlogger.New("")
 	srpc.SetDefaultLogger(logger)
 	params := setupserver.Params{
-		Logger:         logger,
-		PermitInsecure: *permitInsecureMode,
+		GenerateIfMissing: *generateMissingWebcert,
+		Logger:            logger,
+		PermitInsecure:    *permitInsecureMode,
 	}
 	if err := setupserver.SetupTlsWithParams(params); err != nil {
 		logger.Fatalln(err)
@@ -115,8 +121,9 @@ func main() {
 		units.None, "number of images")
 	imgSrvRpcHtmlWriter, err := imageserverRpcd.Setup(
 		imageserverRpcd.Config{
-			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
-			ReplicationMaster:         imageServerAddress,
+			AllowUnauthenticatedReads:   *allowUnauthenticatedReads,
+			InformationDatabaseTemplate: *informationDatabaseTemplate,
+			ReplicationMaster:           imageServerAddress,
 		},
 		imageserverRpcd.Params{
 			ImageDataBase: imdb,
@@ -147,8 +154,9 @@ func main() {
 	logger.Printf("Service ready, opening listener on port: %d\n", *portNum)
 	err = httpd.StartServer(
 		httpd.Config{
-			AllowUnauthenticatedReads: *allowUnauthenticatedReads,
-			PortNumber:                *portNum,
+			AllowUnauthenticatedReads:   *allowUnauthenticatedReads,
+			InformationDatabaseTemplate: *informationDatabaseTemplate,
+			PortNumber:                  *portNum,
 		},
 		httpd.Params{
 			ImageDataBase: imdb,

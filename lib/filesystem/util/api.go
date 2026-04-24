@@ -11,6 +11,8 @@ import (
 	"github.com/Cloud-Foundations/Dominator/lib/log"
 	"github.com/Cloud-Foundations/Dominator/lib/mbr"
 	"github.com/Cloud-Foundations/Dominator/lib/objectserver"
+	"github.com/Cloud-Foundations/Dominator/lib/types"
+	"github.com/Cloud-Foundations/Dominator/proto/installer"
 )
 
 type BootInfoType struct {
@@ -32,8 +34,8 @@ type ComputedFilesData struct {
 	RootDirectory string
 }
 
-type GroupId uint
-type UserId uint
+type GroupId = types.GroupId
+type UserId = types.UserId
 
 type MakeExt4fsParams struct {
 	BytesPerInode            uint64
@@ -131,7 +133,7 @@ func SpliceComputedFiles(fs *filesystem.FileSystem,
 
 func Unpack(fs *filesystem.FileSystem, objectsGetter objectserver.ObjectsGetter,
 	rootDir string, logger log.Logger) error {
-	return unpack(fs, objectsGetter, rootDir, logger)
+	return unpack(fs, objectsGetter, rootDir, nil, logger)
 }
 
 func (bootInfo *BootInfoType) WriteBootloaderConfig(rootDir string,
@@ -159,8 +161,10 @@ type WriteRawOptions struct {
 	AllocateBlocks       bool
 	DoChroot             bool
 	ExtraKernelOptions   string
+	ExtraPartitions      []installer.Partition
 	InitialImageName     string
 	InstallBootloader    bool
+	MinimumBytes         types.Bytes
 	MinimumFreeBytes     uint64
 	OverlayDirectories   []string
 	OverlayFiles         map[string][]byte
