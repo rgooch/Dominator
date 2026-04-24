@@ -63,9 +63,12 @@ subd.tarball: generate
 		-C $(GOPATH) bin/run-in-mntns
 
 
-UPSTREAM_REPO := https://github.com/Cloud-Foundations/Dominator.git
+UPSTREAM_REPO    := https://github.com/Cloud-Foundations/Dominator.git
+BUILD_INFO_FILE  := lib/version/BUILD_INFO
+BUILD_INFO_DEPS  := .git/HEAD .git/logs/HEAD .git/refs/tags \
+                    $(wildcard .git/packed-refs) Makefile
 
-build-info:
+$(BUILD_INFO_FILE): $(BUILD_INFO_DEPS)
 	@version=$$(git describe --tags --always --match 'v[0-9]*.[0-9]*.[0-9]*'); \
 	raw_origin=$$(git remote get-url origin 2>/dev/null || echo unknown); \
 	origin=$$(echo "$$raw_origin" | sed -e 's|^git@[^:]*:||' -e 's|^https://github.com/||' -e 's|\.git$$||'); \
@@ -79,11 +82,19 @@ build-info:
 	else \
 		behind=-1; \
 	fi; \
-	echo "version=$$version"   >  lib/version/BUILD_INFO; \
-	echo "origin=$$origin"     >> lib/version/BUILD_INFO; \
-	echo "branch=$$branch"     >> lib/version/BUILD_INFO; \
-	echo "behind=$$behind"     >> lib/version/BUILD_INFO; \
-	echo "fork=$$is_fork"      >> lib/version/BUILD_INFO
+	{ \
+		echo "version=$$version"; \
+		echo "origin=$$origin"; \
+		echo "branch=$$branch"; \
+		echo "behind=$$behind"; \
+		echo "fork=$$is_fork"; \
+	} > $@.tmp; \
+	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
+
+build-info: $(BUILD_INFO_FILE)
+
+build-info-upstream:
+	@$(MAKE) -B --no-print-directory $(BUILD_INFO_FILE) WITH_UPSTREAM=1
 
 generate: build-info
 
