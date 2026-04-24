@@ -48,7 +48,8 @@ func TestAppendFileNonExistingDestFile(t *testing.T) {
 	// create source file with data.
 	if err := copyToFile(sourceFilePath, 0600,
 		bytes.NewReader(sourceFileData), 0); err != nil {
-		t.Fatalf("error creating source file %s: %s\n", sourceFilePath, err.Error())
+		t.Fatalf("error creating source file %s: %s\n",
+			sourceFilePath, err.Error())
 	}
 	// skipping creation of dest file path.
 	// check dest file doesn't exist before append.
@@ -113,7 +114,8 @@ func TestAppendFileWithExistingDestFile(t *testing.T) {
 		bytes.NewReader(sourceFileData),
 		0,
 	); err != nil {
-		t.Fatalf("error creating source file %s: %s\n", sourceFilePath, err.Error())
+		t.Fatalf("error creating source file %s: %s\n",
+			sourceFilePath, err.Error())
 	}
 	// create dest file with data.
 	if err := copyToFile(

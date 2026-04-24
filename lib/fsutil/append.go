@@ -77,7 +77,8 @@ func appendTree(destDir, sourceDir string,
 			case fileType&fs.ModeSymlink != 0:
 				return errors.New("symlinks are not supported")
 			default:
-				return fmt.Errorf("unsupported file type: %s", fileType.String())
+				return fmt.Errorf("unsupported file type: %s",
+					fileType.String())
 			}
 			return nil
 		})
