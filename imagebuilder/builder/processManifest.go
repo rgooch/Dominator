@@ -294,7 +294,8 @@ func processManifest(ctx context.Context, manifestDir, rootDir string,
 	return nil
 }
 
-func appendFiles(manifestDir, dirname, rootDir string, buildLog io.Writer) error {
+func appendFiles(manifestDir, dirname, rootDir string,
+	buildLog io.Writer) error {
 	startTime := time.Now()
 	sourceDir := filepath.Join(manifestDir, dirname)
 	_, err := os.Open(sourceDir)
@@ -308,7 +309,8 @@ func appendFiles(manifestDir, dirname, rootDir string, buildLog io.Writer) error
 	if err := fsutil.AppendTree(rootDir, sourceDir); err != nil {
 		return fmt.Errorf("error appending %s: %s", dirname, err)
 	}
-	fmt.Fprintf(buildLog, "\nAppended %s tree in %s\n", dirname, format.Duration(time.Since(startTime)))
+	fmt.Fprintf(buildLog, "\nAppended %s tree in %s\n",
+		dirname, format.Duration(time.Since(startTime)))
 	return nil
 }
 
